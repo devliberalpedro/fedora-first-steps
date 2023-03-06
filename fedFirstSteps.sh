@@ -111,6 +111,8 @@ function checkCopr() {
 }
 
 function readBasePackages() {
+    local count=0
+
     # Reads the text file and stores the values in an array
     values=($(cat packages.data))
 
@@ -118,7 +120,17 @@ function readBasePackages() {
     prompt -i "Available values:"
 
     for i in "${!values[@]}"; do
-        echo "$((i+1)). ${values[$i]}"
+        if [ "$count" -eq 3 ]; then
+            printf "\n"
+            count=0
+        fi
+
+        printf "%-30s" "$((i+1)). ${values[$i]}"
+        count=$((count+1))
+
+        if [ -z "${values[i+1]}" ]; then
+            prompt "\n"
+        fi
     done
 
     # Selection option
@@ -143,7 +155,8 @@ function readBasePackages() {
     echo "Selected values:"
 
     for value in "${selectedValues[@]}"; do
-        echo "$value"
+        #echo "$value"
+        prompt -n "$value"
     done
 
     # Asks the user if they want to add extra values
@@ -160,7 +173,7 @@ function readBasePackages() {
 
     # Shows the finals values
     echo "Final values:"
-    
+
     for value in "${choosedValues[@]}"; do
         echo "$value"
     done
@@ -212,21 +225,25 @@ function installVSCode() {
 
 # Check for root access and proceed if it is present
 if [[ "$UID" -eq "$ROOT_UID" ]]; then
-    checkPackageUpdates
-    prompt "\n+++++\n"
-    checkCopr "$REPO_PRELOAD"
-    prompt "\n+++++\n"
+#    checkPackageUpdates
+#    prompt "\n+++++\n"
+#    checkCopr "$REPO_PRELOAD"
+#    prompt "\n+++++\n"
     readBasePackages
 # Check if password is cached (if cache timestamp has not expired yet)
 elif sudo -n true > /dev/null 2>&1; then
-    checkPackageUpdates
-    checkCopr "$REPO_PRELOAD"
+#    checkPackageUpdates
+#    prompt "\n+++++\n"
+#    checkCopr "$REPO_PRELOAD"
+#    prompt "\n+++++\n"
     readBasePackages
 else
     # Check if the variable 'tui_root_login' is not empty
     if [ -n "${tui_root_login}" ]; then
-        checkPackageUpdates
-        checkCopr "$REPO_PRELOAD"
+#        checkPackageUpdates
+#        prompt "\n+++++\n"
+#        checkCopr "$REPO_PRELOAD"
+#        prompt "\n+++++\n"
         readBasePackages
     # If the variable 'tui_root_login' is empty, ask for passwork
     else
@@ -235,8 +252,10 @@ else
         #read -r -p " [ Trusted ] Specify the root password : " -t ${MAX_DELAY} -s password
         
         if sudo -S <<< "${password}" true > /dev/null 2>&1; then
-            checkPackageUpdates
-            checkCopr "$REPO_PRELOAD"
+#            checkPackageUpdates
+#            prompt "\n+++++\n"
+#            checkCopr "$REPO_PRELOAD"
+#            prompt "\n+++++\n"
             readBasePackages
         else
             sleep 3
