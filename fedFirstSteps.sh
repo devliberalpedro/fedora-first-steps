@@ -11,8 +11,6 @@ ROOT_UID=0
 MAX_DELAY=20							                    # max delay to enter root password
 tui_root_login=
 
-#
-INIT_PACKS=
 FONTS_PACK_1="fontconfig-font-replacements"
 FONTS_PACK_2="fontconfig-enhanced-defaults"
 
@@ -172,11 +170,28 @@ printValues() {
     done
 }
 
-function readBasePackages() {
+function readInstallFiles() {
     local count=0
+    local values=
 
-    # Reads the text file and stores the values in an array
-    values=($(cat packages.data))
+    # Analyze which configuration file should be used
+    if [[ "$1" == "packages" || "$1" == "betterFonts" || "$1" == "coprRepos" ]]; then
+        file_name="$1.config"
+
+        prompt -w "Arquivo: $file_name"
+
+        # Check if the file exists
+        if [ ! -f "$file_name" ]; then
+            prompt -e "ERROR: O arquivo $file_name não existe"
+            return 1
+        fi
+
+        # Stores the values from the file in an array
+        values=($(cat "$file_name"))
+    else
+        prompt -e "ERROR: O parâmetro de entrada deve ser 'packages', 'betterFonts' ou 'coprRepos'"
+        return 1
+    fi
 
     # Displays the values and allows the user to choose which ones to use
     prompt -i "Available values:"
@@ -203,12 +218,12 @@ function readBasePackages() {
     selectedValues=()
 
     # Asks the user if they want to add extra values
-    prompt -w "\n Add an extra value? (y/N)"
+    prompt -w "\n Add an extra package/repository? (y/N)"
     read -p " => " userAddValues
 
     # If the user wants to add extra values, they are asked to enter one value per line
     if [[ "$userAddValues" =~ ^[Yy]$ ]]; then
-        prompt -w "\n Enter extra values (one per line, press CTRL+D to finish):"
+        prompt -w "\n Enter extra package/repository (one per line, press CTRL+D to finish):"
 
         while read -p " => " extraValue; do
             chosenValues+=("$extraValue")
@@ -229,7 +244,8 @@ function readBasePackages() {
 # Install base packages
 function baseInstall() {
     checkCopr "$REPO_PRELOAD"
-    readBasePackages
+    readInstallFiles "packages"
+    #readInstallFiles "fonts"
 
     prompt -w "Starting user base packages instalation..."
 
