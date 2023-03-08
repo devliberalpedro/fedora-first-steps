@@ -12,8 +12,7 @@ MAX_DELAY=20							                    # max delay to enter root password
 tui_root_login=
 
 #
-INIT_PACKS_1="bleachbit chntpw darktable discord dnfdragora fira-code-fonts gimp gnome-extensions-app gnome-screenshot gnome-tweaks 'google-roboto*' grub-customizer"
-INIT_PACKS_2="hexchat keepassxc 'mozilla-fira*' preload pycharm-community p7zip p7zip-plugins steam transmission udisks unzip unrar vim vlc zsh"
+INIT_PACKS=
 FONTS_PACK_1="fontconfig-font-replacements"
 FONTS_PACK_2="fontconfig-enhanced-defaults"
 
@@ -74,6 +73,48 @@ OPTIONS (assumes '-a' if no parameters is informed):
 EOF
 }
 
+function initialCheck() {
+    # Check for root access or if password is cached (if cache timestamp has not expired yet)
+    if [[ "$UID" -eq "$ROOT_UID" ]] || sudo -n true > /dev/null 2>&1; then
+        return 0
+    else
+        # Check if the variable 'tui_root_login' is not empty
+        if [ -n "${tui_root_login}" ]; then
+            return 0
+        # If the variable 'tui_root_login' is empty, ask for passwork
+        else
+            prompt -w "[ NOTICE! ] -> Please, run me as root!"
+            read -r -p " [ Trusted ] -> Specify the root password:" -t "${MAX_DELAY}" -s password
+            
+            if sudo -S <<< "${password}" true > /dev/null 2>&1; then
+                prompt "\n"
+                return 0
+            else
+                sleep 3
+                prompt -e "[ ERROR!! ] -> Incorrect password!"
+                return 1
+            fi
+        fi
+    fi
+
+    if ! ping -c 1 google.com &>/dev/null; then
+        prompt -e "=> Error: Network connection not available!" >&2
+        return 1
+    fi
+}
+
+# Perform a packages update
+function checkPackageUpdates() {
+    prompt -w "Checking for package updates..."
+
+    if sudo dnf -y upgrade --refresh; then
+        prompt -s "=> All packages are up to date.\n"
+    else
+        prompt -e "=> Error: System update failed!" >&2
+        exit 1
+    fi
+}
+
 # Function used to install/enable any required copr repository
 function checkCopr() {
     # Store the copr command in a local variable for better code readability
@@ -110,6 +151,27 @@ function checkCopr() {
     fi
 }
 
+# Define a função
+printValues() {
+    local count=0
+    local valuesArray=("${@}")
+
+    for i in "${!valuesArray[@]}"; do
+        if [ "$count" -eq 3 ]; then
+            printf "\n"
+            count=0
+        fi
+
+        printf "%-30s" "$((i+1)). ${valuesArray[$i]}"
+        count=$((count+1))
+
+        if [ -z "${valuesArray[i+1]}" ]; then
+            printf "\n"
+            count=0
+        fi
+    done
+}
+
 function readBasePackages() {
     local count=0
 
@@ -118,93 +180,65 @@ function readBasePackages() {
 
     # Displays the values and allows the user to choose which ones to use
     prompt -i "Available values:"
-
-    for i in "${!values[@]}"; do
-        if [ "$count" -eq 3 ]; then
-            printf "\n"
-            count=0
-        fi
-
-        printf "%-30s" "$((i+1)). ${values[$i]}"
-        count=$((count+1))
-
-        if [ -z "${values[i+1]}" ]; then
-            prompt "\n"
-        fi
-    done
+    printValues ${values[@]}
 
     # Selection option
-    prompt -i "Enter the number of values you want to use, separated by a comma, or '0' to select all values:"
-    read userSelection
+    prompt -i "\n Enter the number of values you want to use, separated by a comma, or '0' to select all values:"
+    read -p " => " userSelection
 
     # Converts user selection to an array
     if [ "$userSelection" == 0 ]; then
-        choosedValues=("${values[@]}")
+        chosenValues=("${values[@]}")
     else
-        choosedValues=($(echo "$userSelection" | tr ',' ' '))
+        # Stores the user chosen integer values
+        chosenPositions=($(echo "$userSelection" | tr ',' ' '))
+
+        # Converts integer values to the correct string and stores in a new array
+        for i in "${!chosenPositions[@]}"; do
+            chosenValues[i]="${values[${chosenPositions[$i]}]}"
+        done
     fi
 
     # Stores the selected values in a new array
     selectedValues=()
 
-    for i in "${choosedValues[@]}"; do
-        selectedValues+=("${values[$((i-1))]}")
-    done
-
-    # Displays selected values
-    echo "Selected values:"
-
-    for value in "${selectedValues[@]}"; do
-        #echo "$value"
-        prompt -n "$value"
-    done
-
     # Asks the user if they want to add extra values
-    echo "Add an extra value? (y/N)"
-    read userAddValues
+    prompt -w "\n Add an extra value? (y/N)"
+    read -p " => " userAddValues
 
     # If the user wants to add extra values, they are asked to enter one value per line
     if [[ "$userAddValues" =~ ^[Yy]$ ]]; then
-        echo "Enter extra values (one per line, press CTRL+D to finish):"
-        while read extraValue; do
-            choosedValues+=("$extraValue")
+        prompt -w "\n Enter extra values (one per line, press CTRL+D to finish):"
+
+        while read -p " => " extraValue; do
+            chosenValues+=("$extraValue")
         done
+
+        prompt "\n"
     fi
 
     # Shows the finals values
-    echo "Final values:"
+    prompt -i "Final values:"
+    printValues ${chosenValues[@]}
 
-    for value in "${choosedValues[@]}"; do
-        echo "$value"
+    for i in "${!chosenValues[@]}"; do
+        INIT_PACKS+="${chosenValues[i]} "
     done
-}
-
-# Perform a packages update
-function checkPackageUpdates() {
-    if [[ $EUID -ne 0 ]]; then
-        prompt -e "=> Error: This function must be run as root!" >&2
-        exit 1
-    fi
-
-    if ! ping -c 1 google.com &>/dev/null; then
-        prompt -e "=> Error: Network connection not available!" >&2
-        exit 1
-    fi
-
-    prompt -w "Checking for package updates..."
-
-    if sudo dnf -y upgrade --refresh; then
-        prompt -s "=> All packages are up to date."
-    else
-        prompt -e "=> Error: System update failed!" >&2
-        exit 1
-    fi
 }
 
 # Install base packages
 function baseInstall() {
-    prompt -i "\n=> Enabling elxreno/preload..."
-    sudo dnf -y upgrade --refresh
+    checkCopr "$REPO_PRELOAD"
+    readBasePackages
+
+    prompt -w "Starting user base packages instalation..."
+
+    if sudo dnf -y install "${INIT_PACKS}"; then
+        prompt -s "=> All packages successfully installed / No packages needed to be installed.\n"
+    else
+        prompt -e "=> Error: Installation of packages failed!" >&2
+        exit 1
+    fi
 }
 
 # Install packages for better fonts
@@ -223,55 +257,17 @@ function installVSCode() {
 #   :::::: M A I N ::::::   #
 #############################
 
-# Check for root access and proceed if it is present
-if [[ "$UID" -eq "$ROOT_UID" ]]; then
-#    checkPackageUpdates
-#    prompt "\n+++++\n"
-#    checkCopr "$REPO_PRELOAD"
-#    prompt "\n+++++\n"
-    readBasePackages
-# Check if password is cached (if cache timestamp has not expired yet)
-elif sudo -n true > /dev/null 2>&1; then
-#    checkPackageUpdates
-#    prompt "\n+++++\n"
-#    checkCopr "$REPO_PRELOAD"
-#    prompt "\n+++++\n"
-    readBasePackages
-else
-    # Check if the variable 'tui_root_login' is not empty
-    if [ -n "${tui_root_login}" ]; then
-#        checkPackageUpdates
-#        prompt "\n+++++\n"
-#        checkCopr "$REPO_PRELOAD"
-#        prompt "\n+++++\n"
-        readBasePackages
-    # If the variable 'tui_root_login' is empty, ask for passwork
-    else
-        prompt -w "[ NOTICE! ] -> Please, run me as root!"
-        read -r -p "[ Trusted ] Specify the root password:" -t "${MAX_DELAY}" -s password
-        #read -r -p " [ Trusted ] Specify the root password : " -t ${MAX_DELAY} -s password
-        
-        if sudo -S <<< "${password}" true > /dev/null 2>&1; then
-#            checkPackageUpdates
-#            prompt "\n+++++\n"
-#            checkCopr "$REPO_PRELOAD"
-#            prompt "\n+++++\n"
-            readBasePackages
-        else
-            sleep 3
-            prompt -e "\n [ Error! ] -> Incorrect password!\n"
-            exit 1
-        fi
-    fi
+if initialCheck; then
+    prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+    #prompt "\n+++++ SYSTEM UPGRADE +++++\n"
+    checkPackageUpdates
+    prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+    #prompt "\n+++++ BASE PACKAGES INSTALLATION +++++n"
+    baseInstall
 fi
 
 #-> Menu:
-#	2. First DNF install (basic packages)
-#		- (pre-requisito para o preload)
-#		sudo dnf copr enable elxreno/preload -y
-#		
-#		- sudo dnf install -y bleachbit chntpw darktable discord dnfdragora fira-code-fonts gimp gnome-extensions-app gnome-screenshot gnome-tweaks 'google-roboto*' grub-customizer hexchat keepassxc 'mozilla-fira*' preload pycharm-community p7zip p7zip-plugins steam transmission udisks unzip unrar vim vlc zsh 
-#	3. Instalar fontes melhores
+#	#	3. Instalar fontes melhores
 #		- sudo dnf copr enable chriscowleyunix/better_fonts -y
 #		- sudo dnf install fontconfig-font-replacements -y
 #		- sudo dnf install fontconfig-enhanced-defaults -y
