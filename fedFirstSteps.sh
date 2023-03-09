@@ -97,7 +97,7 @@ function initialCheck() {
 
     # Check for network connection and print an error message if it's not available
     if ! ping -c 1 google.com &>/dev/null; then
-        prompt -e "=> Error: Network connection not available!" >&2
+        prompt -e "=> ERROR: Network connection not available!" >&2
         return 1
     fi
 }
@@ -111,7 +111,7 @@ function checkPackageUpdates() {
         prompt -s ">>>   All packages are up to date!   <<<\n"
     # Print an error message if not successful
     else
-        prompt -e ">>>   Error: System update failed   <<<" >&2
+        prompt -e ">>>   ERROR: System update failed   <<<" >&2
         exit 1
     fi
 }
@@ -126,13 +126,13 @@ printValues() {
     # Loops through all values in the array
     for i in "${!valuesArray[@]}"; do
         # Inserts a line break after every three values read
-        if [ "$count" -eq 3 ]; then
+        if [ "$count" -eq 2 ]; then
             printf "\n"
             count=0
         fi
 
         # Prints the value of position 'i' of the matrix and increments the counter
-        printf "%-43s" "$((i+1)). ${valuesArray[$i]}"
+        printf "%-60s" "$((i+1)). ${valuesArray[$i]}"
         count=$((count+1))
 
         # Checks if it has reached the end of the array and, if so, inserts a line break
@@ -146,7 +146,7 @@ printValues() {
 # Reads default values defined in configuration files. Ignore lines starting with hashtag
 function readDataFromFile() {
     # Analyze which configuration file should be used
-    if [[ "$1" == "betterFonts" || "$1" == "coprRepos" || "$1" == "packages" ]]; then
+    if [[ "$1" == "betterFonts" || "$1" == "coprRepos" || "$1" == "gpgKeys" || "$1" == "packages" ]]; then
         file_name="$1.config"
 
         prompt "Config file: $file_name\n"
@@ -165,13 +165,15 @@ function readDataFromFile() {
                     betterFonts_file_options+=("$line")
                 elif [[ "$1" == "coprRepos" ]]; then
                     copr_file_options+=("$line")
+                elif [[ "$1" == "gpgKeys" ]]; then
+                    gpgKeys_file_options+=("$line")
                 elif [[ "$1" == "packages" ]]; then
                     packages_file_options+=("$line")
                 fi
             fi
         done < "$file_name"
     else
-        prompt -e "ERROR: Input parameter must be 'packages', 'betterFonts' or 'coprRepos'"
+        prompt -e "ERROR: Input parameter must be 'betterFonts', 'coprRepos', 'gpgKeys' or 'packages'"
         return 1
     fi
 }
@@ -195,7 +197,7 @@ function chooseOptions() {
         options=("${copr_file_options[@]}")
         ;;
         gpgKeys)
-        option=("${gpgKeys_file_options[@]}")
+        options=("${gpgKeys_file_options[@]}")
         ;;
         packages)
         options=("${packages_file_options[@]}")
@@ -262,7 +264,7 @@ function chooseOptions() {
         coprRepos)
             copr_install_options=("${options[@]}")
         ;;
-        coprRepos)
+        gpgKeys)
             gpgKeys_install_options=("${options[@]}")
         ;;
         packages)
@@ -353,7 +355,7 @@ function baseInstall() {
     if installCopr; then
         prompt -s ">>>   copr repositories have been successfully installed!   <<<"
     else
-        prompt -e ">>>   Error installing copr repositories!   <<<"
+        prompt -e ">>>   ERROR: Failed to install copr repositories!   <<<"
         exit 1
     fi
 
@@ -361,33 +363,71 @@ function baseInstall() {
     if installPackages; then
         prompt -s ">>>   All packages have been successfully installed!   <<<"
     else
-        prompt -e ">>>   Error installing packages!   <<<"
+        prompt -e ">>>   ERROR: Failed to installing packages!   <<<"
         exit 1
     fi
 
     # Install better fonts packages (betterFonts.config file)
     if installBetterFonts; then
-        prompt -s ">>>   Fonts have been successfully installed!   <<<"
+        prompt -s ">>>   Fonts have been successfully installed!   <<<\n"
     else
-        prompt -e ">>>   Error installing fonts!   <<<"
+        prompt -e ">>>   ERROR: Failed to installing fonts!   <<<"
         exit 1
     fi
 }
 
 # Install VSCode package
 function vscodeInstall() {
-    : '
-    prompt -w "\n Default packages management..."
-    chooseOptions "betterFonts"
-
-    prompt -w "\n Starting better fonts packages instalation..."
-
-    # Try to install all packages in array
-    if ! sudo dnf -y install "${betterFonts_install_options[@]}" -y; then
-        return 1
-    fi '
-
+    prompt -w "Installing VSCode package..."
     chooseOptions "gpgKeys"
+
+    # Import Microsoft signed GPG Key
+    if sudo rpm --import "${gpgKeys_install_options[@]}"; then
+        prompt -s ">>>   GPG Keys successfully imported!   <<<" 
+    else
+        return 1
+    fi
+
+    # Local variables to vscode config file and vscode repository file
+    local file_name="vscode.config"
+    local yum_path="/etc/yum.repos.d/vscode.repo"
+
+    prompt "Config file: $file_name\n"
+
+    # Check if the config file exists
+    if [ ! -f "$file_name" ]; then
+        prompt -e "ERROR: The file $file_name does not exist"
+        exit 1
+    fi
+
+    # Check if the vscode.repo file exists
+    if [ ! -f "$yum_path" ]; then
+        # Stores the values from the file in an array
+        while read -r line; do
+            # Verifies if the line is not a comment (starts with '#')
+            if [[ ! $line =~ ^\s*# ]]; then
+                echo "$line"
+                echo "$line" | sudo tee -a "$yum_path" >> /dev/null
+            fi
+        done < "$file_name"
+    else
+        prompt -i "VSCode repository file already exists, ignoring current command"
+    fi
+
+    #
+    local vscode_package="code"
+    
+    # Update packages cache
+    prompt -w "Updating DNF cache and installing VSCode package..."
+    if ! sudo dnf check-update; then
+        prompt -e ">>>   ERROR: DNF cache update failed!   <<<"
+        exit 1
+    elif ! sudo dnf install "$vscode_package" -y; then
+        prompt -e ">>>   ERROR: VSCode package install failed!   <<<"
+        exit 1
+    fi
+
+    prompt -s ">>>   VSCode have been successfully installed!   <<<"
 }
 
 #############################
@@ -403,20 +443,7 @@ if initialCheck; then
 fi
 
 
-#-> Menu:
-#	4. Instalar o VSCode
-#		- (Importar chave GPG assinada pela Microsoft)
-#		sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc 
-		
-#		- (Adicionar o repositório oficial do Microsoft Visual Studio Code)
-#		sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
-		
-#		- (Atualizar cache de pacotes) - Ou atualizar sistema com dnf upgrade --refresh
-#		sudo dnf check-update
-		
-#		- Instalar pacote VSCode
-#		sudo dnf install code
-		
+#-> Menu:	
 #	5. First flatpak install
 #		- (Add repositório)
 #		flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
