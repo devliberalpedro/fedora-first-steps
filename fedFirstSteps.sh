@@ -9,13 +9,15 @@ tui_root_login=
 # Variables to store values imported from configuration files
 betterFonts_file_options=()
 copr_file_options=()
-gpgKeys_file_options=()
+flatpak_file_options=()
+microsoftKeys_file_options=()
 packages_file_options=()
 
 # Variables to store user-selected values
 betterFonts_install_options=()
 copr_install_options=()
-gpgKeys_install_options=()
+flatpak_install_options=()
+microsoftKeys_install_options=()
 packages_install_options=()
 
 # Colors scheme
@@ -143,10 +145,19 @@ printValues() {
     done
 }
 
+# Import GPG Keys
+function keyGPGImport() {
+    if sudo rpm --import "$1"; then
+        prompt -s ">>>   GPG Key successfully imported!   <<<" 
+    else
+        return 1
+    fi
+}
+
 # Reads default values defined in configuration files. Ignore lines starting with hashtag
 function readDataFromFile() {
     # Analyze which configuration file should be used
-    if [[ "$1" == "betterFonts" || "$1" == "coprRepos" || "$1" == "gpgKeys" || "$1" == "packages" ]]; then
+    if [[ "$1" == "betterFonts" || "$1" == "coprRepos" || "$1" == "flatpak" || "$1" == "microsoftKeys" || "$1" == "packages" ]]; then
         file_name="$1.config"
 
         prompt "Config file: $file_name\n"
@@ -165,15 +176,17 @@ function readDataFromFile() {
                     betterFonts_file_options+=("$line")
                 elif [[ "$1" == "coprRepos" ]]; then
                     copr_file_options+=("$line")
-                elif [[ "$1" == "gpgKeys" ]]; then
-                    gpgKeys_file_options+=("$line")
+                elif [[ "$1" == "flatpak" ]]; then
+                    flatpak_file_options+=("$line")
+                elif [[ "$1" == "microsoftKeys" ]]; then
+                    microsoftKeys_file_options+=("$line")
                 elif [[ "$1" == "packages" ]]; then
                     packages_file_options+=("$line")
                 fi
             fi
         done < "$file_name"
     else
-        prompt -e "ERROR: Input parameter must be 'betterFonts', 'coprRepos', 'gpgKeys' or 'packages'"
+        prompt -e "ERROR: Input parameter must be 'betterFonts', 'coprRepos', 'flatpak', 'microsoftKeys' or 'packages'"
         return 1
     fi
 }
@@ -186,57 +199,67 @@ function chooseOptions() {
     local chosen=()
 
     # Read default values from config file
-    readDataFromFile "$1"
+    if ! readDataFromFile "$1"; then
+        return 1
+    fi
 
-     # Determine options array based on argument
+    # Determine options array based on argument
     case "$1" in
         betterFonts)
-        options=("${betterFonts_file_options[@]}")
+            options=("${betterFonts_file_options[@]}")
         ;;
         coprRepos)
-        options=("${copr_file_options[@]}")
+            options=("${copr_file_options[@]}")
         ;;
-        gpgKeys)
-        options=("${gpgKeys_file_options[@]}")
+        flatpak)
+            options=("${flatpak_file_options[@]}")
+        ;;
+        microsoftKeys)
+            options=("${microsoftKeys_file_options[@]}")
         ;;
         packages)
-        options=("${packages_file_options[@]}")
+            options=("${packages_file_options[@]}")
         ;;
         *)
-        prompt "Invalid argument: $1"
-        return 1
+            prompt "Invalid argument: $1"
+            return 1
         ;;
     esac
 
     # Displays the values and allows the user to choose which ones to use
     prompt -i "Available packages/repositories:"
-    printValues "${options[@]}"
 
-    # Selection option
-    prompt -i "\n Enter the numbers of packages/repositories you want to use separated by a comma or '0' to select all values [default: 0]:"
-    read -p " => " userSelection
-
-    # Validate user inserts and converts user selection to an array
-    if [[ -z "$userSelection" ||  "$userSelection" == 0 ]]; then
-        chosen=("${options[@]}")
-        prompt "Selected all values: ${chosen[*]}"
+    if [ -z "$options" ]; then
+        prompt -e "There are no options available for installing/enabling"
     else
-        # Convert user input to array of indices
-        IFS=',' read -ra indices <<< "$userSelection"
+        printValues "${options[@]}"
 
-        # Validate indices and convert to array of options
-        for i in "${indices[@]}"; do
-            if [[ "$i" =~ ^[0-9]+$ && "$i" -gt 0 && "$i" -le ${#options[@]} ]]; then
-                chosen+=("${options[$i-1]}")
-            else
-                prompt -e "Invalid value: $i"
-            fi
-        done
+        # Selection option
+        prompt -i "\n Enter the numbers of packages/repositories you want to use separated by a comma or '0' to select all values [default: 0]:"
+        read -p " => " userSelection
 
-        if [[ "${#chosen[@]}" -eq 0 ]]; then
-            prompt -w "No values selected"
+        # Validate user inserts and converts user selection to an array
+        if [[ -z "$userSelection" ||  "$userSelection" == 0 ]]; then
+            chosen=("${options[@]}")
+            prompt "Selected all values: ${chosen[*]}"
         else
-            prompt "Selected values: ${chosen[*]}"
+            # Convert user input to array of indices
+            IFS=',' read -ra indices <<< "$userSelection"
+
+            # Validate indices and convert to array of options
+            for i in "${indices[@]}"; do
+                if [[ "$i" =~ ^[0-9]+$ && "$i" -gt 0 && "$i" -le ${#options[@]} ]]; then
+                    chosen+=("${options[$i-1]}")
+                else
+                    prompt -e "Invalid value: $i"
+                fi
+            done
+
+            if [[ "${#chosen[@]}" -eq 0 ]]; then
+                prompt -w "No values selected"
+            else
+                prompt "Selected values: ${chosen[*]}"
+            fi
         fi
     fi
 
@@ -264,8 +287,11 @@ function chooseOptions() {
         coprRepos)
             copr_install_options=("${options[@]}")
         ;;
-        gpgKeys)
-            gpgKeys_install_options=("${options[@]}")
+        flatpak)
+            flatpak_install_options=("${options[@]}")
+        ;;
+        microsoftKeys)
+            microsoftKeys_install_options=("${options[@]}")
         ;;
         packages)
             packages_install_options=("${options[@]}")
@@ -276,9 +302,13 @@ function chooseOptions() {
         ;;
     esac
 
-    # Shows the finals values
-    prompt -s "Final values:"
-    printValues ${options[@]}
+    if [ -z "$options" ]; then
+        prompt -i "\n No value was given to be installed or enabled!"
+    else
+        # Shows the finals values
+        prompt -s "Final values:"
+        printValues ${options[@]}
+    fi
 }
 
 # Function used to install/enable any required copr repository
@@ -290,37 +320,57 @@ function installCopr() {
     chooseOptions "coprRepos"
 
     # Install/Enable copr repositories
-    for i in "${!copr_copr_options[@]}"; do
-        prompt -w "\n Checking for '"${copr_copr_options[i]}"' repository status..."
+    for i in "${!copr_install_options[@]}"; do
+        prompt -i "\n Checking for '"${copr_install_options[i]}"' repository status..."
 
         # Checks if the repository is active
-        if echo "$copr_list" | grep -q -i "${copr_copr_options[i]}"; then
+        if echo "$copr_list" | grep -q -i "${copr_install_options[i]}"; then
             # Checks if the repository is disabled
             if echo "$copr_list" | grep -q -i "disabled"; then
-                prompt -i "=> Enabling the '"${copr_copr_options[$i]}"' repository..."
+                prompt -i "=> Enabling the '"${copr_install_options[$i]}"' repository..."
 
                 # Enable the repository
-                sudo dnf copr enable "${copr_copr_options[$i]}" -y
+                sudo dnf copr enable "${copr_install_options[$i]}" -y
                 
-                prompt -s "=> The '"${copr_copr_options[$i]}"' repository was successfully enabled!"
+                prompt -s "=> The '"${copr_install_options[$i]}"' repository was successfully enabled!"
             # If the repository is already activated
             else
-                prompt -s "=> The '"${copr_copr_options[$i]}"' repository is already enabled!"
+                prompt -s "=> The '"${copr_install_options[$i]}"' repository is already enabled!"
             fi
         # If the repository is not installed
         else
-            prompt -w "=> Installing the '"${copr_copr_options[$i]}"' repository..."
+            prompt -w "=> Installing the '"${copr_install_options[$i]}"' repository..."
             
             # Try to install copr repositoy
-            if sudo dnf copr enable "${copr_copr_options[$i]}" -y; then
-                prompt -s "=> The '"${copr_copr_options[$i]}"' repository was successfully installed!"
+            if sudo dnf copr enable "${copr_install_options[$i]}" -y; then
+                prompt -s "=> The '"${copr_install_options[$i]}"' repository was successfully installed!"
             # If install was not successful
             else
-                prompt -e "=> Failed to install the '"${copr_copr_options[$i]}"' repository"
+                prompt -e "=> Failed to install the '"${copr_install_options[$i]}"' repository"
                 return 1
             fi
         fi
     done
+}
+
+# Add dbeaver repository and import GPG Key
+function dbeaverConfig() {
+    #
+    local dbeaverRepo="https://dbeaver.io/repo/"
+
+    #
+    if ! sudo dnf config-manager --add-repo "$dbeaverRepo"; then
+        prompt -e ">>>   ERROR: Failed to add dBeaver repository!   <<<"
+        exit 1
+    fi
+
+    readDataFromFile "GPGKeyImport"
+
+    gpgKeyImport ""
+
+    # sudo dnf config-manager --add-repo https://dbeaver.io/repo/ \
+    #&& sudo rpm --import https://dbeaver.io/debs/RPM-GPG-KEY-dbeaver \
+    #&& sudo dnf install dbeaver-ce
 }
 
 # Function used to install packages
@@ -331,14 +381,14 @@ function installPackages() {
     prompt -w "\n Starting user base packages instalation..."
 
     # Try to install all packages in array
-    if ! sudo dnf -y install "${packages_install_options[@]}" -y; then
+    if ! sudo dnf -y install "${packages_install_options[@]}"; then
         return 1
     fi
 }
 
 # Function used to install better fonts packages
 function installBetterFonts() {
-    prompt -w "\n Default packages management..."
+    prompt -w "\n Fonts packages management..."
     chooseOptions "betterFonts"
 
     prompt -w "\n Starting better fonts packages instalation..."
@@ -377,45 +427,43 @@ function baseInstall() {
 }
 
 # Install VSCode package
-function vscodeInstall() {
-    prompt -w "Installing VSCode package..."
-    chooseOptions "gpgKeys"
+function microsoftInstall() {
+    prompt -w "Importing Microsoft signed GPG Key..."
+    chooseOptions "microsoftKeys"
 
     # Import Microsoft signed GPG Key
-    if sudo rpm --import "${gpgKeys_install_options[@]}"; then
-        prompt -s ">>>   GPG Keys successfully imported!   <<<" 
-    else
-        return 1
-    fi
+    keyGPGImport "${microsoftKeys_install_options[@]}"
 
-    # Local variables to vscode config file and vscode repository file
-    local file_name="vscode.config"
-    local yum_path="/etc/yum.repos.d/vscode.repo"
+    # Local variables to Microsoft VSCode config file, repository file and package name
+    local file_name_vscode="vscode.config"
+    local yum_path_vscode="/etc/yum.repos.d/vscode.repo"
+    local vscode_package="code"
 
-    prompt "Config file: $file_name\n"
+    prompt -w "\n Installing Microsoft apps packages..."
+    prompt "Config file: $file_name_vscode\n"
 
     # Check if the config file exists
-    if [ ! -f "$file_name" ]; then
-        prompt -e "ERROR: The file $file_name does not exist"
+    if [ ! -f "$file_name_vscode" ]; then
+        prompt -e "ERROR: The file $file_name_vscode does not exist"
         exit 1
     fi
 
+    prompt -i "Installing VSCode package..."
+    prompt "Config file: $file_name_vscode\n"
+
     # Check if the vscode.repo file exists
-    if [ ! -f "$yum_path" ]; then
+    if [ ! -f "$yum_path_vscode" ]; then
         # Stores the values from the file in an array
         while read -r line; do
             # Verifies if the line is not a comment (starts with '#')
             if [[ ! $line =~ ^\s*# ]]; then
                 echo "$line"
-                echo "$line" | sudo tee -a "$yum_path" >> /dev/null
+                echo "$line" | sudo tee -a "$yum_path_vscode" >> /dev/null
             fi
-        done < "$file_name"
+        done < "$file_name_vscode"
     else
-        prompt -i "VSCode repository file already exists, ignoring current command"
+        prompt -i "VSCode repository file already exists, ignoring current command\n"
     fi
-
-    #
-    local vscode_package="code"
     
     # Update packages cache
     prompt -w "Updating DNF cache and installing VSCode package..."
@@ -427,7 +475,67 @@ function vscodeInstall() {
         exit 1
     fi
 
-    prompt -s ">>>   VSCode have been successfully installed!   <<<"
+    # Local variables to Microsoft teams config file, repository file and package name
+    local file_name_teams="teams.config"
+    local yum_path_teams="/etc/yum.repos.d/teams.repo"
+    local teams_package="teams"
+
+    prompt -w "\n Installing Microsoft teams package..."
+    prompt "Config file: $file_name_teams\n"
+
+    # Check if the vscode.repo file exists
+    if [ ! -f "$yum_path_teams" ]; then
+        # Stores the values from the file in an array
+        while read -r line; do
+            # Verifies if the line is not a comment (starts with '#')
+            if [[ ! $line =~ ^\s*# ]]; then
+                echo "$line"
+                echo "$line" | sudo tee -a "$yum_path_teams" >> /dev/null
+            fi
+        done < "$file_name_teams"
+    else
+        prompt -i "Microsoft teams repository file already exists, ignoring current command\n"
+    fi
+
+    # Update packages cache
+    prompt -w "Updating DNF cache and installing VSCode package..."
+    if ! sudo dnf check-update; then
+        prompt -e ">>>   ERROR: DNF cache update failed!   <<<"
+        exit 1
+    elif ! sudo dnf install "$teams_package" -y; then
+        prompt -e ">>>   ERROR: Microsoft teams package install failed!   <<<"
+        #exit 1
+    fi
+
+    prompt -s ">>>   Microsoft VSCode and Teams have been successfully installed!   <<<\n"
+}
+
+function flatpakInstall() {
+    #
+    local flatpakPackages="flatpak.x86_64 flatpak-libs.x86_64 flatpak-selinux.noarch flatpak-session-helper.x86_64"
+    local flatpakRepo="https://flathub.org/repo/flathub.flatpakrepo"
+    
+    prompt -w "Install flatpak packages..."
+
+    # Check if flatpak packages are installed
+    if ! sudo dnf list installed | grep -q -i "flatpak"; then
+        prompt -e "Flatpak is not installed on the system..."
+        prompt -i "Installing flatpak on the system..."
+
+        # Install flatpak packages if are not installed
+        if ! sudo dnf -y install "$flatpakPackages"; then
+            prompt -e ">>>   ERROR: Flatpak packages install failed!   <<<"
+            exit 1
+        fi
+    fi
+
+    # Enable flatpak repository
+    if ! flatpak remote-add --if-not-exists flathub "$flatpakRepo"; then
+        prompt -e ">>>   ERROR: Flatpak repository install failed!   <<<"
+        exit 1
+    fi
+
+    chooseOptions "flatpak"
 }
 
 #############################
@@ -438,21 +546,18 @@ if initialCheck; then
     checkPackageUpdates
     prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
     baseInstall
-    prompt -i ">>>>>>>>>>      VS CODE INSTALLATION       <<<<<<<<<<"
-    vscodeInstall
+    prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+    microsoftInstall
+    prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+    flatpakInstall
 fi
 
+: '
+1. Verificar pacotes com caracteres especiais (packages.config) - baseInstall
+2. Verifciar saída dupla ao atualizar o cache do dnf (microsoftInstall)
+3. Verificar erro no respositório do Teams
+'
 
-#-> Menu:	
-#	5. First flatpak install
-#		- (Add repositório)
-#		flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-		
-#		- (DBeaver)
-#		flatpak install -y flathub io.dbeaver.DBeaverCommunity
-		
-#		- (Flatseal)
-#		flatpak install -y flathub com.github.tchx84.Flatseal
-		
-#		- (Spotify)
-#		flatpak install -y flathub com.spotify.Client
+: '
+sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+'
