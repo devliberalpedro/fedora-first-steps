@@ -73,6 +73,70 @@ OPTIONS (assumes '-a' if no parameters is informed):
 EOF
 }
 
+function nVidiaWarning() {
+cat << EOF
+
+>>> IMPORTANT <<<
+
+Installing nVidia drivers requires some manual procedures.
+
+First, select option number '1' from the menu below. Some packages will be installed
+and then the kernel key generation procedure for secure boot will start.
+
+>> A password must be created when prompted. <<
+
+The password does not need to be complex and should be easy to memorize as it will
+be requested the next time the system is started.
+
+After this, the script will ask if it should restart the system automatically (recommended)
+or if you want to restart later.
+
+>> It is important to remember this password cause the procedure can only be completed after
+restarting the system and enrolling the kernel key in secure boot. <<
+
+When the system restarts, the secure boot key enrollment system will be displayed
+on the screen. This procedure is part of the BIOS and must be performed for the drivers
+to be successfully installed.
+
+>> This screen will ask for the key that was created in the step before restarting the system. <<
+
+The steps are described below:
+
+1. Select “Enroll MOK“.
+2. Click on “Continue“.
+3. Select “Yes” and enter the password generated in the previous step
+4. Select "OK" and your computer will restart again
+
+After the system restart, restart the script and select the option referring to the nVidia driver
+in the main menu and, later, select option 2 of the specific menu for the nVidia drivers.
+
+EOF
+}
+
+function nVidiaReboot() {
+cat << EOF
+
+>>> IMPORTANT <<<
+
+When the system restarts, the secure boot key enrollment system will be displayed
+on the screen. This procedure is part of the BIOS and must be performed for the drivers
+to be successfully installed.
+
+>> This screen will ask for the key that was created in the step before restarting the system. <<
+
+The steps are described below:
+
+1. Select “Enroll MOK“.
+2. Click on “Continue“.
+3. Select “Yes” and enter the password generated in the previous step
+4. Select "OK" and your computer will restart again
+
+After the system restart, restart the script and select the option referring to the nVidia driver
+in the main menu and, later, select option 2 of the specific menu for the nVidia drivers.
+
+EOF
+}
+
 function initialCheck() {
     # Check for root access or if password is cached (if cache timestamp has not expired yet)
     if [[ "$UID" -eq "$ROOT_UID" ]] || sudo -n true > /dev/null 2>&1; then
@@ -538,26 +602,246 @@ function flatpakInstall() {
     chooseOptions "flatpak"
 }
 
+function installnVidia() {
+: '
+    local rpmFusionFree="https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm"
+    local rpmFusionNonFree="https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
+
+    # Install RPMFusion repositories
+    if ! sudo dnf install "$rpmFusionFree"; then
+        prompt -e "Fail to install RPM Fusion free repositorie!"
+        exit 1
+    elif ! sudo dnf install "$rpmFusionNonFree"; then
+        prompt -e "Fail to install RPM Fusion non-free repositorie!"
+        exit 1
+    elif ! sudo dnf upgrade --refresh && ! sudo dnf groupupdate core; then
+        prompt -e "System repositories update faleid!"
+        exit 1
+    else
+        prompt -e "Fail to install RPM Fusion repositories" 
+        exit 1
+    fi
+'    
+    # Receive file values
+    local nVidiaPre="akmods kmodtool mokutil openssl"
+
+    # Receive user-selected values
+    local nVidiaPackages="akmod-nvidia gcc kernel-devel kernel-headers xorg-x11-drv-nvidia xorg-x11-drv-nvidia-cuda xorg-x11-drv-nvidia-libs xorg-x11-drv-nvidia-libs.i686"
+
+    nVidiaWarning
+
+    prompt -w ">>> This script install nVidia drivers in a clean install! <<<"
+    prompt -w ">>> DO NOT USE TO UPDATE YOUR ALREADY INSTALLED DRIVERS! <<<\n"
+
+    # Print menu
+    prompt -w "nVidia drivers menu (automatically sign NVidia kernel)"
+    prompt "1. Before key enrollment"
+    prompt "2. After key enrollment\n"
+    read -p "Choose only one option: " optionsSelection
+
+    if [[ $optionsSelection -eq 1 ]]; then
+        #
+        prompt -w "Installing nVidia prerequisite packages"
+
+        if ! sudo dnf -y install $nVidiaPre; then
+            prompt -e "Error installing nVidia prerequisite packages!"
+            exit 1
+        else
+            prompt -s "nVidia prerequisite packages successfuly installed"
+        fi
+
+        #
+        prompt -w "Generate a signing key..."
+        if ! sudo kmodgenca -a; then
+            prompt -e "Error while generate a signing key!"
+            exit 1
+        fi
+
+        #
+        prompt -w "Initiate the key enrollment (make Linux kernel trust drivers signed with your key)..."
+        if ! sudo mokutil --import /etc/pki/akmods/certs/public_key.der; then
+            prompt -e "Error while initiate the key enrollment! "
+        fi
+
+        # Print menu
+        prompt -w "It is highly recommended that you reboot your system now to continue the key enrollment process."
+
+        #
+        nVidiaReboot
+
+        #
+        read -p "Reboot system now? [Y/n]: " rebootSystem
+
+        # 
+        if [[ -z "$rebootSystem" ||  "$rebootSystem" =~ ^[Yy]$ ]]; then
+            prompt -s "Rebooting..."
+            #sudo reboot
+        elif [[ "$rebootSystem" =~ ^[Nn]$ ]]; then
+            prompt -w "Please restart as soon as possible."
+            return 0
+        else
+            prompt -e "ERROR: Invalid option!"
+            exit 1
+        fi
+    # 
+    elif [[ $optionsSelection -eq 2 ]]; then
+        prompt -w "Installing nVidia packages"
+        if ! sudo dnf -y install $nVidiaPackages; then
+
+            prompt -e "Error installing nVidia prerequisite packages!"
+            exit 1
+        else
+            prompt -s "nVidia packages successfuly installed"
+        fi
+
+        #
+        prompt -w "It is recommended to wait a few seconds before confirming that the kernel module has been compiled and boot image have been loaded."
+        prompt -i "Waiting 5 seconds..."
+        sleep 5
+
+        # Make sure the kernel modules got compiled
+        if ! sudo akmods --force; then
+            prompt -e "ERROR: Kernel module has not been compiled"
+        # Make sure the boot image got updated as well
+        elif ! sudo dracut --force; then
+            prompt -e "ERROR: Boot image has not been updated"
+        else
+            prompt -s "Kernel modules compiled and boot image update successfuly "
+        fi
+
+         # Print menu
+        prompt -w "A system restart is required for all changes to take effect."
+        read -p "Reboot system now? [Y/n]: " rebootSystemFinal
+
+        # 
+        if [[ -z "$rebootSystemFinal" ||  "$rebootSystemFinal" =~ ^[Yy]$ ]]; then
+            prompt -s "Rebooting..."
+            #sudo reboot
+        elif [[ "$rebootSystemFinal" =~ ^[Nn]$ ]]; then
+            prompt -w "Please restart as soon as possible."
+            return 0
+        else
+            prompt -e "ERROR: Invalid option!"
+            exit 1
+        fi
+    # 
+    else
+        prompt -w "Valor inválido! Por favor, escolha '1' ou '2'"
+        prompt -e "Falha ao instalar os drivers nVidia!"
+        exit 1
+    fi
+
+: '
+Reboot your device
+    sudo reboot
+'
+}
+
 #############################
 #   :::::: M A I N ::::::   #
 #############################
+
+# Welcome message
+prompt -s "\t************************************************"
+prompt -s "\t*           'sysUpdate (by piotrek)'           *"
+prompt -s "\t*--                                          --*"
+prompt -s "\t*  run ./fedFirstSteps.sh -h for more options  *"
+prompt -s "\t************************************************\n"
+
+# Check for root and internet connection
 if initialCheck; then
-    prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
-    checkPackageUpdates
-    prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
-    baseInstall
-    prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
-    microsoftInstall
-    prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
-    flatpakInstall
+    # Receive file values
+    menuOptions=()
+    # Receive user-selected values
+    menuChosen=()
+
+    # Print menu
+    prompt -w "Menu (Choose one or more options separated by comman)"
+    prompt "1. System upgrade (sudo dnf -y upgrade --refresh)"
+    prompt "2. Base install (copr repositories, packages and better fonts)"
+    prompt "3. Microsoft poackages (VSCode and Teams)"
+    prompt "4. Flatpak packages install"
+    prompt "5. nVidia install (Requires manual intervention)"
+    prompt "0. All steps above"
+    prompt "\n"
+    read -p "Choose one or more options separated by comma: " optionsSelection
+
+    # Validate user inserts and converts user selection to an array
+    if [[ -z "$optionsSelection" ||  "$optionsSelection" == 0 ]]; then
+        finalValues=("0")
+        prompt -s "Selected all values!"
+    else
+        # Convert user input to array of indices
+        IFS=',' read -ra indices <<< "$optionsSelection"
+
+        # Validate indices and convert to array of options
+        for i in "${indices[@]}"; do
+            if [[ $i =~ ^[0-9]+$ && "$i" -gt 0 && $i -le 5 ]]; then
+                menuChosen+=("$i")
+            else
+                prompt -e "Invalid value: $i"
+                exit 1
+            fi
+        done
+
+        # Remove duplicate elements and sort the array values
+        finalValues=($(echo "${menuChosen[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+        # Check if the length of the array "menuChosen" is equal to 0
+        if [[ "${#finalValues[@]}" -eq 0 ]]; then
+            prompt -w "No values selected"
+        else
+            prompt "Selected values: ${finalValues[*]}"
+        fi
+    fi
+
+    prompt -e "Final Values: ${finalValues[@]}"
+
+    #
+    for i in "${finalValues[@]}"; do
+        echo "$i"
+        case "$i" in
+            0)
+                prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+                checkPackageUpdates
+                prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+                baseInstall
+                prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+                microsoftInstall
+                prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+                flatpakInstall
+                prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+                installnVidia
+            ;;
+            1)
+                prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+                checkPackageUpdates
+            ;;
+            2)
+                prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+                baseInstall
+            ;;
+            3)
+                prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+                microsoftInstall
+            ;;
+            4)
+                prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+                flatpakInstall
+            ;;
+            5)
+                prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+                installnVidia
+            ;;
+            *)
+                prompt "Invalid argument: $i"
+            ;;
+        esac
+    done
 fi
 
 : '
 1. Verificar pacotes com caracteres especiais (packages.config) - baseInstall
 2. Verifciar saída dupla ao atualizar o cache do dnf (microsoftInstall)
 3. Verificar erro no respositório do Teams
-'
-
-: '
-sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
 '
