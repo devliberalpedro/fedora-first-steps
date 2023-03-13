@@ -417,26 +417,6 @@ function installCopr() {
     done
 }
 
-# Add dbeaver repository and import GPG Key
-function dbeaverConfig() {
-    #
-    local dbeaverRepo="https://dbeaver.io/repo/"
-
-    #
-    if ! sudo dnf config-manager --add-repo "$dbeaverRepo"; then
-        prompt -e ">>>   ERROR: Failed to add dBeaver repository!   <<<"
-        exit 1
-    fi
-
-    readDataFromFile "GPGKeyImport"
-
-    gpgKeyImport ""
-
-    # sudo dnf config-manager --add-repo https://dbeaver.io/repo/ \
-    #&& sudo rpm --import https://dbeaver.io/debs/RPM-GPG-KEY-dbeaver \
-    #&& sudo dnf install dbeaver-ce
-}
-
 # Function used to install packages
 function installPackages() {
     prompt -w "\n Default packages management..."
@@ -730,11 +710,6 @@ function installnVidia() {
         prompt -e "Falha ao instalar os drivers nVidia!"
         exit 1
     fi
-
-: '
-Reboot your device
-    sudo reboot
-'
 }
 
 #############################
