@@ -443,6 +443,41 @@ function installBetterFonts() {
     fi
 }
 
+function enableRPMFusion() {
+    local rpmFusionFree="https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm"
+    local rpmFusionNonFree="https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
+
+    prompt -w "Enabling RPM Fusion repositories..."
+
+    # Install RPMFusion repositories
+    if ! sudo dnf -y install "$rpmFusionFree"; then
+        prompt -e ">>> ERROR: Fail to install RPM Fusion free repositorie! <<<"
+        exit 1
+    elif ! sudo dnf -y install "$rpmFusionNonFree"; then
+        prompt -e ">>> ERROR: Fail to install RPM Fusion non-free repositorie! <<<"
+        exit 1
+    elif ! sudo dnf upgrade --refresh && ! sudo dnf groupupdate core; then
+        prompt -e ">>> ERROR: System repositories update faleid! <<<"
+        exit 1
+    else
+        prompt -s "RPM Fusion repositories installed successfuly"
+    fi
+}
+
+function enableGoogleChrome() {
+    prompt -w "Enabling Google Chrome repositorie..."
+
+    if ! sudo dnf -y install fedora-workstation-repositories; then
+        prompt -e ">>> ERROR: Fail to install Fedora workstation repositories! <<<"
+        exit 1
+    fi
+
+    if ! sudo dnf -y config-manager --set-enabled google-chrome; then
+        prompt -e ">>> ERROR: Fail to enable Google Chrome repositories! <<<"
+        exit 1
+    fi
+}
+
 # Install base packages
 function baseInstall() {
     # Execute the copr manager function
@@ -452,6 +487,9 @@ function baseInstall() {
         prompt -e ">>>   ERROR: Failed to install copr repositories!   <<<"
         exit 1
     fi
+
+    enableRPMFusion
+    enableGoogleChrome
 
     # Install default packages (packages.config file)
     if installPackages; then
@@ -582,26 +620,7 @@ function flatpakInstall() {
     chooseOptions "flatpak"
 }
 
-function installnVidia() {
-: '
-    local rpmFusionFree="https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm"
-    local rpmFusionNonFree="https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
-
-    # Install RPMFusion repositories
-    if ! sudo dnf install "$rpmFusionFree"; then
-        prompt -e "Fail to install RPM Fusion free repositorie!"
-        exit 1
-    elif ! sudo dnf install "$rpmFusionNonFree"; then
-        prompt -e "Fail to install RPM Fusion non-free repositorie!"
-        exit 1
-    elif ! sudo dnf upgrade --refresh && ! sudo dnf groupupdate core; then
-        prompt -e "System repositories update faleid!"
-        exit 1
-    else
-        prompt -e "Fail to install RPM Fusion repositories" 
-        exit 1
-    fi
-'    
+function installnVidia() {  
     # Receive file values
     local nVidiaPre="akmods kmodtool mokutil openssl"
 
@@ -655,7 +674,7 @@ function installnVidia() {
         # 
         if [[ -z "$rebootSystem" ||  "$rebootSystem" =~ ^[Yy]$ ]]; then
             prompt -s "Rebooting..."
-            #sudo reboot
+            sudo reboot
         elif [[ "$rebootSystem" =~ ^[Nn]$ ]]; then
             prompt -w "Please restart as soon as possible."
             return 0
@@ -696,7 +715,7 @@ function installnVidia() {
         # 
         if [[ -z "$rebootSystemFinal" ||  "$rebootSystemFinal" =~ ^[Yy]$ ]]; then
             prompt -s "Rebooting..."
-            #sudo reboot
+            sudo reboot
         elif [[ "$rebootSystemFinal" =~ ^[Nn]$ ]]; then
             prompt -w "Please restart as soon as possible."
             return 0
@@ -717,11 +736,12 @@ function installnVidia() {
 #############################
 
 # Welcome message
-prompt -s "\t************************************************"
-prompt -s "\t*           'sysUpdate (by piotrek)'           *"
-prompt -s "\t*--                                          --*"
-prompt -s "\t*  run ./fedFirstSteps.sh -h for more options  *"
-prompt -s "\t************************************************\n"
+prompt -s "\t**********************************************"
+prompt -s "\t*            'Fedora First Steps'            *"
+prompt -s "\t*                (by piotrek)                *"
+prompt -s "\t*--                                        --*"
+prompt -s "\t*     run ./fedFirstSteps.sh -h for help     *"
+prompt -s "\t**********************************************\n"
 
 # Check for root and internet connection
 if initialCheck; then
@@ -734,7 +754,7 @@ if initialCheck; then
     prompt -w "Menu (Choose one or more options separated by comman)"
     prompt "1. System upgrade (sudo dnf -y upgrade --refresh)"
     prompt "2. Base install (copr repositories, packages and better fonts)"
-    prompt "3. Microsoft poackages (VSCode and Teams)"
+    prompt "3. Microsoft packages (VSCode and Teams)"
     prompt "4. Flatpak packages install"
     prompt "5. nVidia install (Requires manual intervention)"
     prompt "0. All steps above"
@@ -774,38 +794,47 @@ if initialCheck; then
 
     #
     for i in "${finalValues[@]}"; do
-        echo "$i"
         case "$i" in
             0)
                 prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+				initialCheck
                 checkPackageUpdates
                 prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+				initialCheck
                 baseInstall
                 prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+				initialCheck
                 microsoftInstall
                 prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+				initialCheck
                 flatpakInstall
                 prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+				initialCheck
                 installnVidia
             ;;
             1)
                 prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+				initialCheck
                 checkPackageUpdates
             ;;
             2)
                 prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+				initialCheck
                 baseInstall
             ;;
             3)
                 prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+				initialCheck
                 microsoftInstall
             ;;
             4)
                 prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+				initialCheck
                 flatpakInstall
             ;;
             5)
                 prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+				initialCheck
                 installnVidia
             ;;
             *)
