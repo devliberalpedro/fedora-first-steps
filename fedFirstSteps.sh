@@ -790,8 +790,6 @@ if initialCheck; then
         fi
     fi
 
-    prompt -e "Final Values: ${finalValues[@]}"
-
     #
     for i in "${finalValues[@]}"; do
         case "$i" in
