@@ -813,9 +813,9 @@ while true; do
         prompt "4. Flatpak packages install"
         prompt "5. nVidia install (Requires manual intervention)"
         prompt "0. All steps above"
-        prompt "..."
+        prompt "-"
         prompt "Q. Quit"
-        prompt "\n"
+        prompt ""
         read -p "Choose one or more options separated by comma: " optionsSelection
         
         # Validate user inserts and converts user selection to an array
@@ -824,7 +824,7 @@ while true; do
             exit 1
         elif [[ -z "$optionsSelection" || "$optionsSelection" == 0 ]]; then
             finalValues=("0")
-            prompt -s "Selected all values!"
+            #prompt -s "Selected all values!"
         else
             # Convert user input to array of indices
             IFS=',' read -ra indices <<< "$optionsSelection"
@@ -848,15 +848,16 @@ while true; do
             finalValues=($(echo "${menuChosen[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
             # Check if the length of the array "menuChosen" is equal to 0
-            if [[ "${#finalValues[@]}" -eq 0 ]]; then
-                prompt -w "No values selected"
-            else
-                prompt "Selected values: ${finalValues[*]}"
-            fi
+            #if [[ "${#finalValues[@]}" -eq 0 ]]; then
+            #    prompt -w "No values selected"
+            #else
+            #    prompt "Selected values: ${finalValues[*]}"
+            #fi
         fi
 
         #
         for i in "${finalValues[@]}"; do
+            prompt ""
             case "$i" in
                 0)
                     prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
@@ -880,7 +881,7 @@ while true; do
     				initialCheck
                     installnVidia
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 1)
@@ -889,7 +890,7 @@ while true; do
     				initialCheck
                     checkPackageUpdates
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 2)
@@ -898,7 +899,7 @@ while true; do
     				initialCheck
                     baseInstall
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 3)
@@ -907,7 +908,7 @@ while true; do
     				initialCheck
                     microsoftInstall
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 4)
@@ -916,7 +917,7 @@ while true; do
     				initialCheck
                     flatpakInstall
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 5)
@@ -925,11 +926,11 @@ while true; do
     				initialCheck
                     installnVidia
 
-                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
                     sleep 5
                 ;;
                 *)
-                    prompt -w ">>>   Backing to main menu in 3 seconds!   <<<"
+                    prompt -w ">>>   Waiting for 3 seconds to continue...   <<<"
                     sleep 3
                 ;;
             esac
