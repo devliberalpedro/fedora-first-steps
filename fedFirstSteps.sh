@@ -170,15 +170,48 @@ function initialCheck() {
 
 # Perform a packages update
 function checkPackageUpdates() {
-    prompt -w "Checking for package updates..."
+    local firmwareError=0
 
-    # Try to execute user-selected packages installation
+    prompt -w "Checking for packages updates..."
+
+    # Try to execute a DNF update
     if sudo dnf -y upgrade --refresh; then
         prompt -s ">>>   All packages are up to date!   <<<\n"
     # Print an error message if not successful
     else
         prompt -e ">>>   ERROR: System update failed   <<<" >&2
         exit 1
+    fi
+
+    prompt -w "Checking for flatpak packages updates..."
+    
+    # Try to execute a flatpak update
+    if sudo flatpak -y update; then
+        prompt -s ">>>   All flatpak packages are up to date!   <<<\n"
+    # Print an error message if not successful
+    else
+        prompt -e ">>>   ERROR: Flatpak update failed   <<<" >&2
+        exit 1
+    fi
+
+    prompt -w "Checking for firmwares updates..."
+
+    local fwupdate=0
+
+    if sudo fwupdmgr refresh --force; then
+        local fwupGetUps=$(sudo fwupdmgr get-updates)
+
+        if sudo fwupdmgr update; then
+            prompt -s ">>>   All firmwares are up to date!   <<<"
+        else
+            fwupUpdate=1
+        fi
+    else
+        fwupUpdate=1
+    fi
+
+    if [ "{$fwupdate}" = "1" ];then
+        prompt -e ">>>   ERROR: Firmware update failed!   <<<"
     fi
 }
 
@@ -501,7 +534,7 @@ function baseInstall() {
 
     # Install better fonts packages (betterFonts.config file)
     if installBetterFonts; then
-        prompt -s ">>>   Fonts have been successfully installed!   <<<\n"
+        prompt -s ">>>   Fonts have been successfully installed!   <<<"
     else
         prompt -e ">>>   ERROR: Failed to installing fonts!   <<<"
         exit 1
@@ -557,6 +590,7 @@ function microsoftInstall() {
         exit 1
     fi
 
+: '
     # Local variables to Microsoft teams config file, repository file and package name
     local file_name_teams="teams.config"
     local yum_path_teams="/etc/yum.repos.d/teams.repo"
@@ -590,10 +624,12 @@ function microsoftInstall() {
     fi
 
     prompt -s ">>>   Microsoft VSCode and Teams have been successfully installed!   <<<\n"
+'
 }
 
 function flatpakInstall() {
     #
+    local error=0
     local flatpakPackages="flatpak.x86_64 flatpak-libs.x86_64 flatpak-selinux.noarch flatpak-session-helper.x86_64"
     local flatpakRepo="https://flathub.org/repo/flathub.flatpakrepo"
     
@@ -618,6 +654,21 @@ function flatpakInstall() {
     fi
 
     chooseOptions "flatpak"
+
+    prompt -w "\n Starting flatpack packages instalation..."
+
+    for package in "${flatpak_install_options[@]}"; do
+        if ! flatpak -y install flathub "${package}"; then
+            prompt -w ">>>   ERROR: Failed to install ${package} package!   <<<"
+            error=1
+        fi
+    done
+
+    if [ "$error" -eq 0 ]; then
+        prompt -s ">>>   Flatpak packages have been successfully installed!   <<<"
+    else
+        prompt -e ">>>   ERROR: Failed to install flatpak packages! Check output!   <<<"
+    fi
 }
 
 function installnVidia() {  
@@ -735,112 +786,156 @@ function installnVidia() {
 #   :::::: M A I N ::::::   #
 #############################
 
-# Welcome message
-prompt -s "\t**********************************************"
-prompt -s "\t*            'Fedora First Steps'            *"
-prompt -s "\t*                (by piotrek)                *"
-prompt -s "\t*--                                        --*"
-prompt -s "\t*     run ./fedFirstSteps.sh -h for help     *"
-prompt -s "\t**********************************************\n"
+while true; do
+    clear
+    shopt -s nocasematch
 
-# Check for root and internet connection
-if initialCheck; then
-    # Receive file values
-    menuOptions=()
-    # Receive user-selected values
-    menuChosen=()
+    # Welcome message
+    prompt -s "\t**********************************************"
+    prompt -s "\t*            'Fedora First Steps'            *"
+    prompt -s "\t*                (by piotrek)                *"
+    prompt -s "\t*--                                        --*"
+    prompt -s "\t*     run ./fedFirstSteps.sh -h for help     *"
+    prompt -s "\t**********************************************\n"
 
-    # Print menu
-    prompt -w "Menu (Choose one or more options separated by comman)"
-    prompt "1. System upgrade (sudo dnf -y upgrade --refresh)"
-    prompt "2. Base install (copr repositories, packages and better fonts)"
-    prompt "3. Microsoft packages (VSCode and Teams)"
-    prompt "4. Flatpak packages install"
-    prompt "5. nVidia install (Requires manual intervention)"
-    prompt "0. All steps above"
-    prompt "\n"
-    read -p "Choose one or more options separated by comma: " optionsSelection
+    # Check for root and internet connection
+    if initialCheck; then
+        # Receive file values
+        menuOptions=()
+        # Receive user-selected values
+        menuChosen=()
 
-    # Validate user inserts and converts user selection to an array
-    if [[ -z "$optionsSelection" ||  "$optionsSelection" == 0 ]]; then
-        finalValues=("0")
-        prompt -s "Selected all values!"
-    else
-        # Convert user input to array of indices
-        IFS=',' read -ra indices <<< "$optionsSelection"
-
-        # Validate indices and convert to array of options
-        for i in "${indices[@]}"; do
-            if [[ $i =~ ^[0-9]+$ && "$i" -gt 0 && $i -le 5 ]]; then
-                menuChosen+=("$i")
-            else
-                prompt -e "Invalid value: $i"
-                exit 1
-            fi
-        done
-
-        # Remove duplicate elements and sort the array values
-        finalValues=($(echo "${menuChosen[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-
-        # Check if the length of the array "menuChosen" is equal to 0
-        if [[ "${#finalValues[@]}" -eq 0 ]]; then
-            prompt -w "No values selected"
+        # Print menu
+        prompt -w "Menu (Choose one or more options separated by comman)"
+        prompt "1. System upgrade (sudo dnf -y upgrade --refresh)"
+        prompt "2. Base install (copr repositories, packages and better fonts)"
+        prompt "3. Microsoft packages (VSCode and Teams)"
+        prompt "4. Flatpak packages install"
+        prompt "5. nVidia install (Requires manual intervention)"
+        prompt "0. All steps above"
+        prompt "..."
+        prompt "Q. Quit"
+        prompt "\n"
+        read -p "Choose one or more options separated by comma: " optionsSelection
+        
+        # Validate user inserts and converts user selection to an array
+        if [[ "$optionsSelection" =~ ^[Q-q] ]]; then
+            prompt -s ">>>   Thanks for use Fedora First Steps Script (by piotrek)!   <<<"
+            exit 1
+        elif [[ -z "$optionsSelection" || "$optionsSelection" == 0 ]]; then
+            finalValues=("0")
+            prompt -s "Selected all values!"
         else
-            prompt "Selected values: ${finalValues[*]}"
-        fi
-    fi
+            # Convert user input to array of indices
+            IFS=',' read -ra indices <<< "$optionsSelection"
 
-    #
-    for i in "${finalValues[@]}"; do
-        case "$i" in
-            0)
-                prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
-				initialCheck
-                checkPackageUpdates
-                prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
-				initialCheck
-                baseInstall
-                prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
-				initialCheck
-                microsoftInstall
-                prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
-				initialCheck
-                flatpakInstall
-                prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
-				initialCheck
-                installnVidia
-            ;;
-            1)
-                prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
-				initialCheck
-                checkPackageUpdates
-            ;;
-            2)
-                prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
-				initialCheck
-                baseInstall
-            ;;
-            3)
-                prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
-				initialCheck
-                microsoftInstall
-            ;;
-            4)
-                prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
-				initialCheck
-                flatpakInstall
-            ;;
-            5)
-                prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
-				initialCheck
-                installnVidia
-            ;;
-            *)
-                prompt "Invalid argument: $i"
-            ;;
-        esac
-    done
-fi
+            # Validate indices and convert to array of options
+            for i in "${indices[@]}"; do
+                if [[ "$i" =~ ^[Q-q] ]]; then
+                    prompt -e ">>>   The Q option can only be used separately! Run this script again!   <<<"
+                    exit 1
+                elif [[ $i =~ ^[0-9]+$ && "$i" -gt 0 && $i -le 5 ]]; then
+                    menuChosen+=("$i")
+                else
+                    prompt -e "Invalid argument: $i"
+
+                    prompt -w ">>>   Backing to main menu in 2 seconds!   <<<"
+                    sleep 2
+                fi
+            done
+
+            # Remove duplicate elements and sort the array values
+            finalValues=($(echo "${menuChosen[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+            # Check if the length of the array "menuChosen" is equal to 0
+            if [[ "${#finalValues[@]}" -eq 0 ]]; then
+                prompt -w "No values selected"
+            else
+                prompt "Selected values: ${finalValues[*]}"
+            fi
+        fi
+
+        #
+        for i in "${finalValues[@]}"; do
+            case "$i" in
+                0)
+                    prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+
+				    initialCheck
+                    checkPackageUpdates
+
+                    prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+    				initialCheck
+                    baseInstall
+
+                    prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+    				initialCheck
+                    microsoftInstall
+
+                    prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+    				initialCheck
+                    flatpakInstall
+
+                    prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+    				initialCheck
+                    installnVidia
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                1)
+                    prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
+
+    				initialCheck
+                    checkPackageUpdates
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                2)
+                    prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
+
+    				initialCheck
+                    baseInstall
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                3)
+                    prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
+
+    				initialCheck
+                    microsoftInstall
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                4)
+                    prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
+
+    				initialCheck
+                    flatpakInstall
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                5)
+                    prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
+
+    				initialCheck
+                    installnVidia
+
+                    prompt -w ">>>   Backing to main menu in 5 seconds!   <<<"
+                    sleep 5
+                ;;
+                *)
+                    prompt -w ">>>   Backing to main menu in 3 seconds!   <<<"
+                    sleep 3
+                ;;
+            esac
+        done
+    fi
+done
 
 : '
 1. Verificar pacotes com caracteres especiais (packages.config) - baseInstall
