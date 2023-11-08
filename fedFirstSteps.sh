@@ -746,7 +746,7 @@ function installnVidia() {
 
         #
         prompt -w "It is recommended to wait a few seconds before confirming that the kernel module has been compiled and boot image have been loaded."
-        prompt -i "Waiting 5 seconds..."
+        prompt -i "Waiting few seconds..."
         sleep 5
 
         # Make sure the kernel modules got compiled
@@ -807,9 +807,9 @@ while true; do
 
         # Print menu
         prompt -w "Menu (Choose one or more options separated by comman)"
-        prompt "1. System upgrade (sudo dnf -y upgrade --refresh)"
+        prompt "1. System upgrade (dnf | flatpak | firmware)"
         prompt "2. Base install (copr repositories, packages and better fonts)"
-        prompt "3. Microsoft packages (VSCode and Teams)"
+        prompt "3. Microsoft packages"
         prompt "4. Flatpak packages install"
         prompt "5. nVidia install (Requires manual intervention)"
         prompt "0. All steps above"
