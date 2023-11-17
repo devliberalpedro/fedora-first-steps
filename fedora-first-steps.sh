@@ -782,6 +782,18 @@ function installnVidia() {
     fi
 }
 
+function returnToMainMenu() {
+    prompt -w ">>>   Return to main menu?   <<<"
+    read -p " >>>   Press Y to return to main menu or any key to exit: " returnSelection
+
+    if ! [[ "$returnSelection" =~ ^[Y-y] ]]; then
+        prompt -s ">>>   Thanks for use Fedora First Steps Script (by piotrek)!   <<<"
+        exit 1
+    else
+        return 0
+    fi
+}
+
 #############################
 #   :::::: M A I N ::::::   #
 #############################
@@ -881,8 +893,7 @@ while true; do
     				initialCheck
                     installnVidia
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 1)
                     prompt -i ">>>>>>>>>>         SYSTEM UPGRADE          <<<<<<<<<<"
@@ -890,8 +901,7 @@ while true; do
     				initialCheck
                     checkPackageUpdates
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 2)
                     prompt -i ">>>>>>>>>>   BASE PACKAGES INSTALLATION    <<<<<<<<<<"
@@ -899,8 +909,7 @@ while true; do
     				initialCheck
                     baseInstall
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 3)
                     prompt -i ">>>>>>>>>>   MICROSOFT APPS INSTALLATION   <<<<<<<<<<"
@@ -908,8 +917,7 @@ while true; do
     				initialCheck
                     microsoftInstall
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 4)
                     prompt -i ">>>>>>>>>>      FLATPAK INSTALLATION       <<<<<<<<<<"
@@ -917,8 +925,7 @@ while true; do
     				initialCheck
                     flatpakInstall
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 5)
                     prompt -i ">>>>>>>>>>   NVIDIA DRIVER INSTALLATION    <<<<<<<<<<"
@@ -926,8 +933,7 @@ while true; do
     				initialCheck
                     installnVidia
 
-                    prompt -w ">>>   Waiting for 5 seconds to continue...   <<<"
-                    sleep 5
+                    returnToMainMenu
                 ;;
                 *)
                     prompt -w ">>>   Waiting for 3 seconds to continue...   <<<"
